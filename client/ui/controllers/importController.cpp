@@ -94,6 +94,8 @@ bool ImportController::extractConfigFromFile(const QString &fileName)
 
 bool ImportController::extractConfigFromData(QString data)
 {
+    m_maliciousWarningText.clear();
+
     QString config = data;
     QString prefix;
     QString errormsg;
