@@ -190,6 +190,7 @@ RadioButton {
     MouseArea {
         anchors.fill: root
         cursorShape: Qt.PointingHandCursor
+        preventStealing: false
         enabled: false
     }
 }
