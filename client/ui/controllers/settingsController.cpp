@@ -182,6 +182,8 @@ void SettingsController::clearSettings()
     m_appSplitTunnelingModel->setRouteMode(Settings::AppsRouteMode::VpnAllExceptApps);
     m_appSplitTunnelingModel->toggleSplitTunneling(false);
 
+    toggleAutoStart(false);
+
     emit changeSettingsFinished(tr("All settings have been reset to default values"));
 
 #ifdef Q_OS_IOS
