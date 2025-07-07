@@ -62,7 +62,8 @@ PageType {
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
 
-                enabled: SettingsController.isKillSwitchEnabled && !ConnectionController.isConnected
+                visible: false
+                // enabled: SettingsController.isKillSwitchEnabled && !ConnectionController.isConnected
                 checked: !SettingsController.strictKillSwitchEnabled
 
                 text: qsTr("Soft KillSwitch")
@@ -73,7 +74,9 @@ PageType {
                 }
             }
 
-            DividerType {}
+            DividerType {
+                visible: false
+            }
 
             VerticalRadioButton {
                 id: strictKillSwitch
