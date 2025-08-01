@@ -308,7 +308,7 @@ PageType {
                 Layout.fillWidth: true
                 Layout.margins: 16
 
-                headerText: qsTr("Import / Export Sites")
+                headerText: qsTr("Additional options")
             }
 
             LabelWithButtonType {
@@ -347,6 +347,34 @@ PageType {
                         moreActionsDrawer.closeTriggered()
                         PageController.showBusyIndicator(false)
                     }
+                }
+            }
+
+            DividerType {}
+
+            LabelWithButtonType {
+                id: clearSitesButton
+                Layout.fillWidth: true
+
+                text: qsTr("Clear site list")
+                rightImageSource: "qrc:/images/controls/trash.svg"
+
+                clickedFunction: function() {
+                    var headerText = qsTr("Clear site list?")
+                    var descriptionText = qsTr("All sites will be removed from list.")
+                    var yesButtonText = qsTr("Continue")
+                    var noButtonText = qsTr("Cancel")
+
+                    var yesButtonFunction = function() {
+                        PageController.showBusyIndicator(true)
+                        SitesController.removeSites()
+                        PageController.showBusyIndicator(false)
+                    }
+                    var noButtonFunction = function() {
+                        
+                    }
+
+                    showQuestionDrawer(headerText, descriptionText, yesButtonText, noButtonText, yesButtonFunction, noButtonFunction)
                 }
             }
 
