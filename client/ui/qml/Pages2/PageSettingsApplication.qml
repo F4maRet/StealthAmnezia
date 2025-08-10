@@ -140,7 +140,7 @@ PageType {
             }
 
             DividerType {
-                visible: !GC.isMobile()
+                visible: !GC.isMobile() && !IsMacOsNeBuild
             }
 
             SwitcherType {
