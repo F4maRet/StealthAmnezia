@@ -117,6 +117,13 @@ QVariant ApiServicesModel::data(const QModelIndex &index, int role) const
     case EndDateRole: {
         return QDateTime::fromString(apiServiceData.subscription.endDate, Qt::ISODate).toLocalTime().toString("d MMM yyyy");
     }
+    case OrderRole: {
+        if (serviceType == serviceType::amneziaPremium) {
+            return 0;
+        } else if (serviceType == serviceType::amneziaFree) {
+            return 1;
+        }
+    }
     }
 
     return QVariant();
@@ -216,6 +223,7 @@ QHash<int, QByteArray> ApiServicesModel::roleNames() const
     roles[FeaturesRole] = "features";
     roles[PriceRole] = "price";
     roles[EndDateRole] = "endDate";
+    roles[OrderRole] = "order";
 
     return roles;
 }
