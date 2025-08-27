@@ -218,9 +218,6 @@ PageType {
                     ApiConfigsController.prepareVpnKeyExport()
 
                     PageController.showBusyIndicator(false)
-                    
-                    // Navigate to PageShareConnection page
-                    //PageController.goToPage(PageEnum.PageShareConnection)
                 }
             }
 

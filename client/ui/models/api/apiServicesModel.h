@@ -20,7 +20,8 @@ public:
         RegionRole,
         FeaturesRole,
         PriceRole,
-        EndDateRole
+        EndDateRole,
+        OrderRole
     };
 
     explicit ApiServicesModel(QObject *parent = nullptr);
