@@ -162,6 +162,8 @@ PageType {
     ListViewType {
         id: listView
 
+        ScrollBar.vertical: ScrollBarType { policy: ScrollBar.AlwaysOn }
+
         anchors.top: header.bottom
         anchors.bottom: addAppButton.top
         anchors.left: parent.left
