@@ -351,7 +351,7 @@ jobs:
     runs-on: macos-latest
 
     env:
-      QT_VERSION: 6.8.0
+      QT_VERSION: 6.8.3
 
       MAC_TEAM_ID: ${{ secrets.MAC_TEAM_ID }}
 
@@ -381,7 +381,7 @@ jobs:
         xcode-version: '16.2.0'
 
     - name: 'Install Qt'
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4
       with:
         version: ${{ env.QT_VERSION }}
         host: 'mac'
@@ -389,10 +389,15 @@ jobs:
         arch: 'clang_64'
         modules: 'qtremoteobjects qt5compat qtshadertools'
         dir: ${{ runner.temp }}
+        #setup-python: 'true'
+        #set-env: 'true'
+        #extra: '--external 7z --base ${{ env.QT_MIRROR }}'
         setup-python: 'true'
         set-env: 'true'
-        extra: '--external 7z --base ${{ env.QT_MIRROR }}'
-
+        aqtversion: '==3.3.0'       
+        py7zrversion: '==0.22.*'  
+        extra: '--base ${{ env.QT_MIRROR }}' 
+        cache: 'true'
 
     - name: 'Get sources'
       uses: actions/checkout@v4

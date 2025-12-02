@@ -1,9 +1,17 @@
 #include "ipcserver.h"
 
 #include <QDateTime>
+#include <QDebug>
 #include <QFileInfo>
+#include <QHostAddress>
+#include <QJsonObject>
+#include <QLocalServer>
 #include <QLocalSocket>
 #include <QObject>
+#include <QRemoteObjectHost>
+#include <QRemoteObjectNode>
+#include <QString>
+#include <QStringList>
 
 #include "logger.h"
 #include "router.h"
@@ -16,8 +24,8 @@
 
 
 IpcServer::IpcServer(QObject *parent) : IpcInterfaceSource(parent)
-
 {
+    connect(&m_pingHelper, &PingHelper::connectionLose, this, &IpcServer::connectionLose);
 }
 
 int IpcServer::createPrivilegedProcess()
@@ -182,6 +190,20 @@ void IpcServer::setLogsEnabled(bool enabled)
     } else {
         Logger::deInit();
     }
+}
+
+bool IpcServer::startNetworkCheck(const QString& serverIpv4Gateway, const QString& deviceIpv4Address)
+{
+    qDebug() << "startNetworkCheck";
+    m_pingHelper.start(serverIpv4Gateway, deviceIpv4Address);
+    return true;
+}
+
+bool IpcServer::stopNetworkCheck()
+{
+    qDebug() << "stopNetworkCheck";
+    m_pingHelper.stop();
+    return true;
 }
 
 bool IpcServer::resetKillSwitchAllowedRange(QStringList ranges)
