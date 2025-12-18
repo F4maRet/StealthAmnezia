@@ -110,10 +110,14 @@ PageType {
 
                 clickedFunc: function() {
                     var endpoint = ApiServicesModel.getStoreEndpoint()
-                    if (endpoint !== undefined && endpoint !== "") {
+                    if (endpoint !== undefined && endpoint !== "" && Qt.platform.os !== "ios" && !IsMacOsNeBuild) {
                         Qt.openUrlExternally(endpoint)
                         PageController.closePage()
                         PageController.closePage()
+                    } else if (Qt.platform.os === "ios" || IsMacOsNeBuild) {
+                        PageController.showBusyIndicator(true)
+                        ApiConfigsController.importSerivceFromAppStore()
+                        PageController.showBusyIndicator(false)
                     } else {
                         PageController.showBusyIndicator(true)
                         ApiConfigsController.importServiceFromGateway()
