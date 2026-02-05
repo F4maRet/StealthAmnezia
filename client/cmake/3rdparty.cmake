@@ -83,6 +83,19 @@ add_compile_definitions(_WINSOCKAPI_)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(BUILD_WITH_QT6 ON)
 add_subdirectory(${CLIENT_ROOT_DIR}/3rd/qtkeychain)
+
+if(ANDROID)
+    # Use qtgamepad from amnezia-vpn/qtgamepad repository
+    add_subdirectory(${CLIENT_ROOT_DIR}/3rd/qtgamepad)
+    # Link both the C++ module and QML plugin
+    if(TARGET GamepadLegacy)
+        target_link_libraries(${PROJECT} PRIVATE GamepadLegacy)
+    endif()
+    if(TARGET GamepadLegacyQuickPrivate)
+        target_link_libraries(${PROJECT} PRIVATE GamepadLegacyQuickPrivate)
+    endif()
+endif()
+
 set(LIBS ${LIBS} qt6keychain)
 
 include_directories(

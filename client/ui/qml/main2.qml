@@ -6,6 +6,7 @@ import QtQuick.Dialogs
 
 import PageEnum 1.0
 import Style 1.0
+import QtGamepadLegacy
 
 import "Config"
 import "Controls2"
@@ -79,6 +80,44 @@ Window  {
             default:
                 PageController.keyPressEvent(event.key)
                 event.accepted = true
+            }
+        }
+    }
+
+
+
+    Loader {
+        active: Qt.platform.os === "android"
+        sourceComponent: Component {
+            Item {
+                Gamepad {
+                    id: gamepad
+                    deviceId: GamepadManager.connectedGamepads.length > 0 ? GamepadManager.connectedGamepads[0] : -1
+
+                    onButtonStartChanged: {
+                        if (buttonStart) {
+                            ServersModel.setProcessedServerIndex(ServersModel.defaultIndex)
+                            ConnectionController.connectButtonClicked()
+                        }
+                    }
+                }
+
+                GamepadKeyNavigation {
+                    id: gamepadKeyNav
+                    gamepad: gamepad
+                    active: true
+                }
+
+                Connections {
+                    target: GamepadManager
+                    function onConnectedGamepadsChanged() {
+                        if (GamepadManager.connectedGamepads.length > 0) {
+                            gamepad.deviceId = GamepadManager.connectedGamepads[0]
+                        } else {
+                            gamepad.deviceId = -1
+                        }
+                    }
+                }
             }
         }
     }

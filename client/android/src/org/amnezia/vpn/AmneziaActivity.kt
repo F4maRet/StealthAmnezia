@@ -26,6 +26,8 @@ import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.provider.Settings
+import android.view.InputDevice
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -273,6 +275,44 @@ class AmneziaActivity : QtActivity() {
         super.onWindowFocusChanged(hasFocus)
         Log.d(TAG, "Window focus changed: hasFocus=$hasFocus")
     }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val deviceId = event.deviceId
+        val keyCode = event.keyCode
+        val pressed = event.action == KeyEvent.ACTION_DOWN
+        val source = event.source
+
+        if (deviceId < 0 && pressed) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_BUTTON_A,
+                KeyEvent.KEYCODE_BUTTON_B,
+                KeyEvent.KEYCODE_BUTTON_X,
+                KeyEvent.KEYCODE_BUTTON_Y,
+                KeyEvent.KEYCODE_BUTTON_START,
+                KeyEvent.KEYCODE_BUTTON_SELECT,
+                KeyEvent.KEYCODE_DPAD_CENTER -> {
+                    nativeGamepadKeyEvent(0, keyCode, true)
+                    nativeGamepadKeyEvent(0, keyCode, false)
+                    return true
+                }
+            }
+        }
+
+        // Real gamepad events (deviceId >= 0)
+        if (deviceId >= 0) {
+            val isGamepad = (source and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+            val isJoystick = (source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+            val isDpad = (source and InputDevice.SOURCE_DPAD) == InputDevice.SOURCE_DPAD
+            if (isGamepad || isJoystick || isDpad) {
+                nativeGamepadKeyEvent(deviceId, keyCode, pressed)
+                return true
+            }
+        }
+
+        return super.dispatchKeyEvent(event)
+    }
+
+    private external fun nativeGamepadKeyEvent(deviceId: Int, keyCode: Int, pressed: Boolean)
 
     override fun onPause() {
         super.onPause()
