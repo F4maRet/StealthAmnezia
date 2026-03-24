@@ -758,7 +758,11 @@ bool ApiConfigsController::updateServiceFromGateway(const int serverIndex, const
         }
         return true;
     } else {
-        emit errorOccurred(errorCode);
+        if (errorCode == ErrorCode::ApiSubscriptionExpiredError) {
+            emit subscriptionExpiredOnServer();
+        } else {
+            emit errorOccurred(errorCode);
+        }
         return false;
     }
 }
