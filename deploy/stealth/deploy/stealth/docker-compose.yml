@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  amnezia-wg:
+    image: amnezia/amneziawg:latest
+    container_name: amnezia-wg
+    restart: unless-stopped
+    ports:
+      - "51820:51820/udp"
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ./config:/config
+
+  xray:
+    image: amnezia/xray:latest
+    container_name: xray-reality
+    restart: unless-stopped
+    ports:
+      - "443:443/tcp"
+    volumes:
+      - ./config:/config
+
+  updater:
+    image: containrrr/watchtower
+    container_name: stealth-updater
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 3600 --cleanup --grace-period 30s
