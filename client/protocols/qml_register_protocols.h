@@ -15,6 +15,9 @@ inline void registerProtocolsTypes()
     // StealthAmnezia: только эти два протокола
     qRegisterMetaType<amnezia::config_key::Awg>("AwgConfig");
     qRegisterMetaType<amnezia::config_key::Xray>("XrayConfig");
+
+    qmlRegisterType<amnezia::HybridProtocol>("Amnezia", 1, 0, "HybridProtocol");
+    qRegisterMetaType<amnezia::HybridProtocol*>("HybridProtocol*");
 }
 
 #endif // QML_REGISTER_PROTOCOLS_H
