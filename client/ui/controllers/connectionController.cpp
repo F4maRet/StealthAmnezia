@@ -9,11 +9,13 @@
 #include "utilities.h"
 #include "core/controllers/vpnConfigurationController.h"
 #include "version.h"
+#include "protocols/hybridprotocol.h"   // StealthAmnezia
 
 ConnectionController::ConnectionController(const QSharedPointer<ServersModel> &serversModel,
                                            const QSharedPointer<ContainersModel> &containersModel,
                                            const QSharedPointer<ClientManagementModel> &clientManagementModel,
-                                           const QSharedPointer<VpnConnection> &vpnConnection, const std::shared_ptr<Settings> &settings,
+                                           const QSharedPointer<VpnConnection> &vpnConnection,
+                                           const std::shared_ptr<Settings> &settings,
                                            QObject *parent)
     : QObject(parent),
       m_serversModel(serversModel),
@@ -23,12 +25,29 @@ ConnectionController::ConnectionController(const QSharedPointer<ServersModel> &s
       m_settings(settings)
 {
     connect(m_vpnConnection.get(), &VpnConnection::connectionStateChanged, this, &ConnectionController::onConnectionStateChanged);
-    connect(this, &ConnectionController::connectToVpn, m_vpnConnection.get(), &VpnConnection::connectToVpn, Qt::QueuedConnection);
-    connect(this, &ConnectionController::disconnectFromVpn, m_vpnConnection.get(), &VpnConnection::disconnectFromVpn, Qt::QueuedConnection);
-
     connect(this, &ConnectionController::connectButtonClicked, this, &ConnectionController::toggleConnection, Qt::QueuedConnection);
 
     m_state = Vpn::ConnectionState::Disconnected;
+
+    // StealthAmnezia: инициализируем HybridProtocol
+    m_hybridProtocol = new HybridProtocol(QJsonObject(), this);
+    connect(m_hybridProtocol, &HybridProtocol::connected, this, [this]() {
+        m_state = Vpn::ConnectionState::Connected;
+        m_isConnected = true;
+        m_isConnectionInProgress = false;
+        m_connectionStateText = tr("Connected");
+        emit connectionStateChanged();
+    });
+    connect(m_hybridProtocol, &HybridProtocol::disconnected, this, [this]() {
+        m_state = Vpn::ConnectionState::Disconnected;
+        m_isConnected = false;
+        m_isConnectionInProgress = false;
+        m_connectionStateText = tr("Connect");
+        emit connectionStateChanged();
+    });
+    connect(m_hybridProtocol, &HybridProtocol::fallbackTriggered, this, [](const QString &from, const QString &to) {
+        qDebug() << "Hybrid fallback triggered:" << from << "→" << to;
+    });
 }
 
 void ConnectionController::openConnection()
@@ -44,28 +63,20 @@ void ConnectionController::openConnection()
     int serverIndex = m_serversModel->getDefaultServerIndex();
     QJsonObject serverConfig = m_serversModel->getServerConfig(serverIndex);
 
-    DockerContainer container = qvariant_cast<DockerContainer>(m_serversModel->data(serverIndex, ServersModel::Roles::DefaultContainerRole));
+    // StealthAmnezia: используем HybridProtocol вместо старого механизма
+    m_hybridProtocol->start();   // ← главный запуск
 
-    if (!m_containersModel->isSupportedByCurrentPlatform(container)) {
-        emit connectionErrorOccurred(ErrorCode::NotSupportedOnThisPlatform);
-        return;
-    }
-
-    QSharedPointer<ServerController> serverController(new ServerController(m_settings));
-    VpnConfigurationsController vpnConfigurationController(m_settings, serverController);
-
-    QJsonObject containerConfig = m_containersModel->getContainerConfig(container);
-    ServerCredentials credentials = m_serversModel->getServerCredentials(serverIndex);
-
-    auto dns = m_serversModel->getDnsPair(serverIndex);
-
-    auto vpnConfiguration = vpnConfigurationController.createVpnConfiguration(dns, serverConfig, containerConfig, container);
-    emit connectToVpn(serverIndex, credentials, container, vpnConfiguration);
+    m_isConnectionInProgress = true;
+    m_connectionStateText = tr("Connecting...");
+    emit connectionStateChanged();
 }
 
 void ConnectionController::closeConnection()
 {
-    emit disconnectFromVpn();
+    if (m_hybridProtocol) {
+        m_hybridProtocol->stop();
+    }
+    emit disconnectFromVpn(); // оставляем для совместимости со старым VpnConnection
 }
 
 ErrorCode ConnectionController::getLastConnectionError()
@@ -75,62 +86,17 @@ ErrorCode ConnectionController::getLastConnectionError()
 
 void ConnectionController::onConnectionStateChanged(Vpn::ConnectionState state)
 {
+    // Оставляем для совместимости, но Hybrid управляет состоянием сам
     m_state = state;
-
-    m_isConnected = false;
-    m_connectionStateText = tr("Connecting...");
-    switch (state) {
-    case Vpn::ConnectionState::Connected: {
-        m_isConnectionInProgress = false;
-        m_isConnected = true;
-        m_connectionStateText = tr("Connected");
-        break;
-    }
-    case Vpn::ConnectionState::Connecting: {
-        m_isConnectionInProgress = true;
-        break;
-    }
-    case Vpn::ConnectionState::Reconnecting: {
-        m_isConnectionInProgress = true;
-        m_connectionStateText = tr("Reconnecting...");
-        break;
-    }
-    case Vpn::ConnectionState::Disconnected: {
-        m_isConnectionInProgress = false;
-        m_connectionStateText = tr("Connect");
-        break;
-    }
-    case Vpn::ConnectionState::Disconnecting: {
-        m_isConnectionInProgress = true;
-        m_connectionStateText = tr("Disconnecting...");
-        break;
-    }
-    case Vpn::ConnectionState::Preparing: {
-        m_isConnectionInProgress = true;
-        m_connectionStateText = tr("Preparing...");
-        break;
-    }
-    case Vpn::ConnectionState::Error: {
-        m_isConnectionInProgress = false;
-        m_connectionStateText = tr("Connect");
-        emit connectionErrorOccurred(getLastConnectionError());
-        break;
-    }
-    case Vpn::ConnectionState::Unknown: {
-        m_isConnectionInProgress = false;
-        m_connectionStateText = tr("Connect");
-        emit connectionErrorOccurred(getLastConnectionError());
-        break;
-    }
-    }
     emit connectionStateChanged();
 }
 
 void ConnectionController::onCurrentContainerUpdated()
 {
     if (m_isConnected || m_isConnectionInProgress) {
-        emit reconnectWithUpdatedContainer(tr("Settings updated successfully, reconnnection..."));
-        openConnection();
+        emit reconnectWithUpdatedContainer(tr("Settings updated successfully, reconnection..."));
+        closeConnection();
+        QTimer::singleShot(1000, this, &ConnectionController::openConnection);
     } else {
         emit reconnectWithUpdatedContainer(tr("Settings updated successfully"));
     }
@@ -138,7 +104,6 @@ void ConnectionController::onCurrentContainerUpdated()
 
 void ConnectionController::onTranslationsUpdated()
 {
-    // get translated text of current state
     onConnectionStateChanged(getCurrentConnectionState());
 }
 
@@ -159,12 +124,11 @@ void ConnectionController::toggleConnection()
         return;
     }
 
-    if (isConnectionInProgress()) {
-        closeConnection();
-    } else if (isConnected()) {
+    if (isConnectionInProgress() || isConnected()) {
         closeConnection();
     } else {
         emit prepareConfig();
+        openConnection();   // сразу запускаем Hybrid
     }
 }
 

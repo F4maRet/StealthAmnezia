@@ -2,6 +2,7 @@
 #define CONNECTIONCONTROLLER_H
 
 #include "protocols/vpnprotocol.h"
+#include "protocols/hybridprotocol.h"
 #include "ui/models/clientManagementModel.h"
 #include "ui/models/containers_model.h"
 #include "ui/models/servers_model.h"
@@ -16,9 +17,11 @@ public:
     Q_PROPERTY(bool isConnectionInProgress READ isConnectionInProgress NOTIFY connectionStateChanged)
     Q_PROPERTY(QString connectionStateText READ connectionStateText NOTIFY connectionStateChanged)
 
-    explicit ConnectionController(const QSharedPointer<ServersModel> &serversModel, const QSharedPointer<ContainersModel> &containersModel,
+    explicit ConnectionController(const QSharedPointer<ServersModel> &serversModel,
+                                  const QSharedPointer<ContainersModel> &containersModel,
                                   const QSharedPointer<ClientManagementModel> &clientManagementModel,
-                                  const QSharedPointer<VpnConnection> &vpnConnection, const std::shared_ptr<Settings> &settings,
+                                  const QSharedPointer<VpnConnection> &vpnConnection,
+                                  const std::shared_ptr<Settings> &settings,
                                   QObject *parent = nullptr);
 
     ~ConnectionController() = default;
@@ -29,7 +32,6 @@ public:
 
 public slots:
     void toggleConnection();
-
     void openConnection();
     void closeConnection();
 
@@ -37,7 +39,6 @@ public slots:
     void onConnectionStateChanged(Vpn::ConnectionState state);
 
     void onCurrentContainerUpdated();
-
     void onTranslationsUpdated();
 
 signals:
@@ -53,8 +54,6 @@ signals:
     void prepareConfig();
 
 private:
-    Vpn::ConnectionState getCurrentConnectionState();
-
     void continueConnection();
 
     QSharedPointer<ServersModel> m_serversModel;
@@ -62,7 +61,6 @@ private:
     QSharedPointer<ClientManagementModel> m_clientManagementModel;
 
     QSharedPointer<VpnConnection> m_vpnConnection;
-
     std::shared_ptr<Settings> m_settings;
 
     bool m_isConnected = false;
@@ -70,6 +68,9 @@ private:
     QString m_connectionStateText = tr("Connect");
 
     Vpn::ConnectionState m_state;
+
+    // StealthAmnezia: HybridProtocol — основной протокол клиента
+    HybridProtocol* m_hybridProtocol = nullptr;
 };
 
 #endif // CONNECTIONCONTROLLER_H
