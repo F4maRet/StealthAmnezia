@@ -30,6 +30,12 @@ add_subdirectory(client)
 target_sources(client PRIVATE
     client/protocols/hybridprotocol.cpp
     client/protocols/cps_generator.cpp
+    сlient/core/hybrid_connection_manager.cpp
+    client/protocols/hybridprotocol.cpp
+    client/protocols/cps_generator.cpp
+    client/protocols/cps_generator.cpp
+    client/protocols/hybridprotocol.cpp
+    client/core/hybrid_connection_manager.cpp
 )
 
 if(NOT IOS AND NOT ANDROID AND NOT MACOS_NE)

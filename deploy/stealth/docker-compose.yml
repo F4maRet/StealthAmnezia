@@ -11,6 +11,11 @@ services:
       - NET_ADMIN
     volumes:
       - ./config:/config
+    healthcheck:
+      test: ["CMD", "wg", "show"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   xray:
     image: amnezia/xray:latest
@@ -22,9 +27,12 @@ services:
       - ./config:/config
 
   updater:
-    image: containrrr/watchtower
+    image: containrrr/watchtower:latest
     container_name: stealth-updater
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    command: --interval 3600 --cleanup --grace-period 30s
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_GRACE_PERIOD=30s
+    command: --interval 1800 --cleanup --grace-period 30s --rolling-restart
