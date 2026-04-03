@@ -27,9 +27,15 @@ endif()
 
 add_subdirectory(client)
 
+target_sources(client PRIVATE
+    client/protocols/hybridprotocol.cpp
+    client/protocols/cps_generator.cpp
+)
+
 if(NOT IOS AND NOT ANDROID AND NOT MACOS_NE)
     add_subdirectory(service)
 endif()
+
 
 # StealthAmnezia: убрали всё legacy (OpenVPN, Shadowsocks и т.д.)
 # Только AWG + XRay + новый CPS-генератор и авто-updater
