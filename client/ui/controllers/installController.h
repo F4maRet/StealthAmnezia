@@ -34,6 +34,7 @@ public slots:
     void rebootProcessedServer();
     void removeAllContainers();
     void removeProcessedContainer();
+    void upgradeProcessedContainer();
 
     void removeApiConfig(const int serverIndex);
 

@@ -29,6 +29,15 @@ public:
     ErrorCode updateContainer(const ServerCredentials &credentials, DockerContainer container, const QJsonObject &oldConfig,
                               QJsonObject &newConfig);
 
+    // Rebuilds the container image and recreates the container while keeping its /opt/amnezia state (keys, peers,
+    // clients). overlayFiles (path relative to /opt/amnezia -> content) are written over the restored state.
+    // The previous container is restored automatically if anything goes wrong
+    ErrorCode upgradeContainer(const ServerCredentials &credentials, DockerContainer container, const QJsonObject &config,
+                               const QMap<QString, QByteArray> &overlayFiles = {});
+
+    // Makes xray pick up changes of server.json without dropping sessions of other clients
+    ErrorCode reloadXrayConfig(const ServerCredentials &credentials, DockerContainer container);
+
     ErrorCode startupContainerWorker(const ServerCredentials &credentials, DockerContainer container,
                                      const QJsonObject &config = QJsonObject());
 
@@ -67,6 +76,8 @@ private:
 
     ErrorCode isServerPortBusy(const ServerCredentials &credentials, DockerContainer container, const QJsonObject &config);
     bool isReinstallContainerRequired(DockerContainer container, const QJsonObject &oldConfig, const QJsonObject &newConfig);
+    ErrorCode patchServerConfigInPlace(const ServerCredentials &credentials, DockerContainer container, const QJsonObject &config,
+                                       QMap<QString, QByteArray> &overlayFiles);
     ErrorCode isUserInSudo(const ServerCredentials &credentials, DockerContainer container);
     ErrorCode isServerDpkgBusy(const ServerCredentials &credentials, DockerContainer container);
 

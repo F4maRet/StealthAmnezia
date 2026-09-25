@@ -184,6 +184,44 @@ PageType {
             }
 
             LabelWithButtonType {
+                id: upgradeButton
+
+                Layout.fillWidth: true
+
+                visible: root.isClearCacheVisible
+
+                text: qsTr("Update on server")
+                descriptionText: qsTr("Rebuild the protocol with the latest version. Keys and users are kept")
+
+                clickedFunction: function() {
+                    var headerText = qsTr("Update %1 on server?").arg(ContainersModel.getProcessedContainerName())
+                    var descriptionText = qsTr("Connections will be interrupted for a few seconds. Keys and users are kept, " +
+                                               "the previous version is restored automatically if the update fails.")
+                    var yesButtonText = qsTr("Continue")
+                    var noButtonText = qsTr("Cancel")
+
+                    var yesButtonFunction = function() {
+                        PageController.goToPage(PageEnum.PageSetupWizardInstalling)
+                        InstallController.upgradeProcessedContainer()
+                    }
+                    var noButtonFunction = function() {
+                    }
+
+                    showQuestionDrawer(headerText, descriptionText, yesButtonText, noButtonText, yesButtonFunction, noButtonFunction)
+                }
+
+                MouseArea {
+                    anchors.fill: upgradeButton
+                    cursorShape: Qt.PointingHandCursor
+                    enabled: false
+                }
+            }
+
+            DividerType {
+                visible: root.isClearCacheVisible
+            }
+
+            LabelWithButtonType {
                 id: removeButton
 
                 Layout.fillWidth: true

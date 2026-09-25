@@ -128,7 +128,7 @@ PageType {
                     forceActiveFocus()
 
                     var headerText = qsTr("Save settings?")
-                    var descriptionText = qsTr("All users with whom you shared a connection with will no longer be able to connect to it.")
+                    var descriptionText = qsTr("Keys and users are kept on the server. If the port is changed, shared connections have to be updated.")
                     var yesButtonText = qsTr("Continue")
                     var noButtonText = qsTr("Cancel")
 

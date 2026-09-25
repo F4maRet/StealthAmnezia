@@ -918,12 +918,7 @@ ErrorCode ClientManagementModel::revokeXray(const int row,
         logger.error() << "Failed to upload the clientsTable file";
     }
 
-    // Restart container
-    QString restartScript = QString("sudo docker restart $CONTAINER_NAME");
-    error = serverController->runScript(
-        credentials, 
-        serverController->replaceVars(restartScript, serverController->genVarsForScript(credentials, container))
-    );
+    error = serverController->reloadXrayConfig(credentials, container);
     if (error != ErrorCode::NoError) {
         logger.error() << "Failed to restart xray container";
         return error;

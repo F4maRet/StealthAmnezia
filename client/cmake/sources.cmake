@@ -8,6 +8,7 @@ set(HEADERS ${HEADERS}
     ${CLIENT_ROOT_DIR}/core/defs.h
     ${CLIENT_ROOT_DIR}/core/errorstrings.h
     ${CLIENT_ROOT_DIR}/core/scripts_registry.h
+    ${CLIENT_ROOT_DIR}/core/serverStatePatcher.h
     ${CLIENT_ROOT_DIR}/core/server_defs.h
     ${CLIENT_ROOT_DIR}/core/api/apiDefs.h
     ${CLIENT_ROOT_DIR}/core/qrCodeUtils.h
@@ -57,6 +58,7 @@ set(SOURCES ${SOURCES}
     ${CLIENT_ROOT_DIR}/containers/containers_defs.cpp
     ${CLIENT_ROOT_DIR}/core/errorstrings.cpp
     ${CLIENT_ROOT_DIR}/core/scripts_registry.cpp
+    ${CLIENT_ROOT_DIR}/core/serverStatePatcher.cpp
     ${CLIENT_ROOT_DIR}/core/server_defs.cpp
     ${CLIENT_ROOT_DIR}/core/qrCodeUtils.cpp
     ${CLIENT_ROOT_DIR}/core/controllers/coreController.cpp

@@ -26,6 +26,7 @@
 #include "core/networkUtilities.h"
 #include "core/scripts_registry.h"
 #include "core/server_defs.h"
+#include "core/serverStatePatcher.h"
 #include "logger.h"
 #include "settings.h"
 #include "utilities.h"
@@ -263,12 +264,6 @@ ErrorCode ServerController::setupContainer(const ServerCredentials &credentials,
             return e;
     }
 
-    if (!isUpdate) {
-        e = isServerPortBusy(credentials, container, config);
-        if (e)
-            return e;
-    }
-
     e = prepareHostWorker(credentials, container, config);
     if (e)
         return e;
@@ -303,17 +298,157 @@ ErrorCode ServerController::updateContainer(const ServerCredentials &credentials
                                             QJsonObject &newConfig)
 {
     bool reinstallRequired = isReinstallContainerRequired(container, oldConfig, newConfig);
-    qDebug() << "ServerController::updateContainer for container" << container << "reinstall required is" << reinstallRequired;
+    bool preserveState = serverstate::canPreserveState(container, oldConfig, newConfig);
+    qDebug() << "ServerController::updateContainer for container" << container << "reinstall required is" << reinstallRequired
+             << "preserve state is" << preserveState;
+
+    if (reinstallRequired && !preserveState) {
+        return setupContainer(credentials, container, newConfig, true);
+    }
 
     if (reinstallRequired) {
-        return setupContainer(credentials, container, newConfig, true);
-    } else {
-        ErrorCode e = configureContainerWorker(credentials, container, newConfig);
+        // A full reinstall regenerates the server keys and drops every peer. Instead the new settings are patched
+        // into the existing server config and the container is recreated with its state kept
+        const Proto mainProto = ContainerProps::defaultProtocol(container);
+        const QString protoKey = ProtocolProps::protoToString(mainProto);
+        const QString defaultPort = QString::number(ProtocolProps::defaultPort(mainProto));
+        if (oldConfig.value(protoKey).toObject().value(config_key::port).toString(defaultPort)
+            != newConfig.value(protoKey).toObject().value(config_key::port).toString(defaultPort)) {
+            ErrorCode e = isServerPortBusy(credentials, container, newConfig);
+            if (e)
+                return e;
+        }
+
+        QMap<QString, QByteArray> overlayFiles;
+        ErrorCode e = patchServerConfigInPlace(credentials, container, newConfig, overlayFiles);
         if (e)
             return e;
 
-        return startupContainerWorker(credentials, container, newConfig);
+        return upgradeContainer(credentials, container, newConfig, overlayFiles);
     }
+
+    if (container == DockerContainer::Xray) {
+        // configure_container.sh would generate a new key pair and client list, patch the existing config instead
+        QMap<QString, QByteArray> overlayFiles;
+        ErrorCode e = patchServerConfigInPlace(credentials, container, newConfig, overlayFiles);
+        if (e)
+            return e;
+
+        for (auto it = overlayFiles.cbegin(); it != overlayFiles.cend(); ++it) {
+            e = uploadTextFileToContainer(container, credentials, QString::fromUtf8(it.value()), "/opt/amnezia/" + it.key());
+            if (e)
+                return e;
+        }
+        return reloadXrayConfig(credentials, container);
+    }
+
+    ErrorCode e = configureContainerWorker(credentials, container, newConfig);
+    if (e)
+        return e;
+
+    return startupContainerWorker(credentials, container, newConfig);
+}
+
+ErrorCode ServerController::patchServerConfigInPlace(const ServerCredentials &credentials, DockerContainer container,
+                                                     const QJsonObject &config, QMap<QString, QByteArray> &overlayFiles)
+{
+    const QString relativePath = serverstate::serverConfigRelativePath(container);
+    if (relativePath.isEmpty()) {
+        return ErrorCode::NoError;
+    }
+
+    ErrorCode e = ErrorCode::NoError;
+    const QByteArray serverConfig = getTextFileFromContainer(container, credentials, "/opt/amnezia/" + relativePath, e);
+    if (e)
+        return e;
+
+    bool ok = false;
+    const QByteArray patchedConfig = serverstate::patchServerConfig(container, serverConfig, config, ok);
+    if (!ok) {
+        logger.error() << "Unable to patch" << relativePath << "of" << ContainerProps::containerToString(container);
+        return ErrorCode::ServerUpgradeFailed;
+    }
+
+    overlayFiles.insert(relativePath, patchedConfig);
+    return ErrorCode::NoError;
+}
+
+ErrorCode ServerController::upgradeContainer(const ServerCredentials &credentials, DockerContainer container, const QJsonObject &config,
+                                             const QMap<QString, QByteArray> &overlayFiles)
+{
+    qDebug().noquote() << "ServerController::upgradeContainer" << ContainerProps::containerToString(container);
+
+    ErrorCode e = isUserInSudo(credentials, container);
+    if (e)
+        return e;
+
+    e = prepareHostWorker(credentials, container, config);
+    if (e)
+        return e;
+
+    const Vars vars = genVarsForScript(credentials, container, config);
+    const QString dockerfileFolder = amnezia::server::getDockerfileFolder(container);
+    const QString workDir = dockerfileFolder + "/upgrade";
+
+    e = runScript(credentials, QString("sudo rm -rf %1 && mkdir -p %1/overlay && sudo rm -f %2/Dockerfile").arg(workDir, dockerfileFolder));
+    if (e)
+        return e;
+
+    QMap<QString, QByteArray> files;
+    files.insert(dockerfileFolder + "/Dockerfile", amnezia::scriptData(ProtocolScriptType::dockerfile, container).toUtf8());
+    files.insert(workDir + "/run.sh", replaceVars(amnezia::scriptData(ProtocolScriptType::run_container, container), vars).toUtf8());
+    files.insert(workDir + "/start.sh", replaceVars(amnezia::scriptData(ProtocolScriptType::container_startup, container), vars).toUtf8());
+
+    QString upgradeScript = amnezia::scriptData(SharedScriptType::upgrade_container);
+    upgradeScript.replace("$UPGRADE_HEALTH_CHECK", serverstate::healthCheckCommand(container));
+    files.insert(workDir + "/upgrade.sh", replaceVars(upgradeScript, vars).toUtf8());
+
+    for (auto it = overlayFiles.cbegin(); it != overlayFiles.cend(); ++it) {
+        const QString path = workDir + "/overlay/" + it.key();
+        e = runScript(credentials, QString("mkdir -p \"$(dirname %1)\"").arg(path));
+        if (e)
+            return e;
+        files.insert(path, it.value());
+    }
+
+    for (auto it = files.cbegin(); it != files.cend(); ++it) {
+        e = uploadFileToHost(credentials, it.value(), it.key());
+        if (e)
+            return e;
+    }
+
+    QString stdOut;
+    auto cbReadStd = [&](const QString &data, libssh::Client &) {
+        stdOut += data + "\n";
+        return ErrorCode::NoError;
+    };
+
+    // nohup keeps the transaction running to the end even if the ssh session drops in the middle
+    e = runScript(credentials, QString("sudo nohup bash %1/upgrade.sh > %1/upgrade.log 2>&1 < /dev/null; cat %1/upgrade.log").arg(workDir),
+                  cbReadStd, cbReadStd);
+    qDebug().noquote() << "ServerController::upgradeContainer" << stdOut;
+    if (e)
+        return e;
+
+    if (!stdOut.contains("UPGRADE_OK")) {
+        if (stdOut.contains("have reached") && stdOut.contains("pull rate limit"))
+            return ErrorCode::DockerPullRateLimit;
+        if (stdOut.contains("UPGRADE_ROLLED_BACK"))
+            return ErrorCode::ServerUpgradeRolledBack;
+        return ErrorCode::ServerUpgradeFailed;
+    }
+
+    setupServerFirewall(credentials);
+    return ErrorCode::NoError;
+}
+
+ErrorCode ServerController::reloadXrayConfig(const ServerCredentials &credentials, DockerContainer container)
+{
+    // The supervised start.sh restarts xray within a second and other clients keep their sessions.
+    // Servers set up with an older start.sh fall back to a full container restart
+    const QString script = QString("sudo docker exec -i $CONTAINER_NAME sh -c '[ -f /opt/amnezia/.xray-supervised ] && pkill -x xray' "
+                                   "|| sudo docker restart $CONTAINER_NAME");
+    return runScript(credentials, replaceVars(script, genVarsForScript(credentials, container)));
 }
 
 bool ServerController::isReinstallContainerRequired(DockerContainer container, const QJsonObject &oldConfig, const QJsonObject &newConfig)

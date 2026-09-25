@@ -106,6 +106,7 @@
         <file>server_scripts/remove_all_containers.sh</file>
         <file>server_scripts/remove_container.sh</file>
         <file>server_scripts/setup_host_firewall.sh</file>
+        <file>server_scripts/upgrade_container.sh</file>
         <file>server_scripts/sftp/configure_container.sh</file>
         <file>server_scripts/sftp/Dockerfile</file>
         <file>server_scripts/sftp/run_container.sh</file>

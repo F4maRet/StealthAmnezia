@@ -790,6 +790,28 @@ void InstallController::removeProcessedContainer()
     emit installationErrorOccurred(errorCode);
 }
 
+void InstallController::upgradeProcessedContainer()
+{
+    int serverIndex = m_serversModel->getProcessedServerIndex();
+    ServerCredentials serverCredentials =
+            qvariant_cast<ServerCredentials>(m_serversModel->data(serverIndex, ServersModel::Roles::CredentialsRole));
+
+    const DockerContainer container = static_cast<DockerContainer>(m_containersModel->getProcessedContainerIndex());
+    const QString containerName = m_containersModel->getProcessedContainerName();
+    const QJsonObject containerConfig = m_containersModel->getContainerConfig(container);
+
+    QSharedPointer<ServerController> serverController(new ServerController(m_settings));
+    connect(serverController.get(), &ServerController::serverIsBusy, this, &InstallController::serverIsBusy);
+    connect(this, &InstallController::cancelInstallation, serverController.get(), &ServerController::cancelInstallation);
+
+    ErrorCode errorCode = serverController->upgradeContainer(serverCredentials, container, containerConfig);
+    if (errorCode == ErrorCode::NoError) {
+        emit updateContainerFinished(tr("%1 has been updated on the server, all users are kept").arg(containerName));
+        return;
+    }
+    emit installationErrorOccurred(errorCode);
+}
+
 void InstallController::removeApiConfig(const int serverIndex)
 {
     m_serversModel->removeApiConfig(serverIndex);

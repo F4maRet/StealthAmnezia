@@ -30,6 +30,8 @@ QString errorString(ErrorCode code) {
     case(ErrorCode::ServerCgroupMountpoint): errorMessage = QObject::tr("Server error: cgroup mountpoint does not exist"); break;
     case(ErrorCode::DockerPullRateLimit): errorMessage = QObject::tr("Docker error: The pull rate limit has been reached"); break;
     case(ErrorCode::ServerLinuxKernelTooOld): errorMessage = QObject::tr("Server error: Linux kernel is too old"); break;
+    case(ErrorCode::ServerUpgradeFailed): errorMessage = QObject::tr("Server update failed before any change was made, the protocol keeps working as before"); break;
+    case(ErrorCode::ServerUpgradeRolledBack): errorMessage = QObject::tr("Updated container failed the health check, the previous version was restored"); break;
 
     // Libssh errors
     case(ErrorCode::SshRequestDeniedError): errorMessage = QObject::tr("SSH request was denied"); break;
