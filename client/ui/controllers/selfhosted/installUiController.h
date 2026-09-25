@@ -73,6 +73,7 @@ public slots:
     void rebootServer(const QString &serverId);
     void removeAllContainers(const QString &serverId);
     void removeContainer(const QString &serverId, int containerIndex);
+    void upgradeContainer(const QString &serverId, int containerIndex);
     void setContainerEnabled(const QString &serverId, int containerIndex, bool enabled);
     void refreshContainerStatus(const QString &serverId, int containerIndex);
     void refreshContainerDiagnostics(const QString &serverId, int containerIndex, int port);

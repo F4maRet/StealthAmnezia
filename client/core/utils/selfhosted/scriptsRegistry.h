@@ -28,7 +28,8 @@ enum SharedScriptType {
     setup_host_firewall,
     check_connection,
     check_server_is_busy,
-    check_user_in_sudo
+    check_user_in_sudo,
+    upgrade_container
 };
 enum ProtocolScriptType {
     // Protocol scripts
@@ -56,6 +57,10 @@ QString scriptName(ClientScriptType type);
 QString scriptData(SharedScriptType type);
 QString scriptData(ProtocolScriptType type, DockerContainer container);
 QString scriptData(ClientScriptType type);
+
+// Makes xray re-read server.json. The supervised start.sh restarts xray within a second and other clients keep
+// their sessions; servers set up with an older start.sh fall back to a full container restart
+QString xrayReloadScript();
 
 ScriptVars genBaseVars(const ServerCredentials &credentials, 
                        DockerContainer container,

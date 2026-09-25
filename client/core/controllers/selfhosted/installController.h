@@ -41,6 +41,10 @@ public:
     // Updates client-local settings only: rewrites the stored container config for any self-hosted/native server. No SSH.
     ErrorCode updateClientConfig(const QString &serverId, DockerContainer container, ContainerConfig &newConfig);
 
+    // Rebuilds the container image with the latest protocol version and recreates the container keeping its
+    // /opt/amnezia state (keys, peers, clients). The previous container is restored if anything goes wrong
+    ErrorCode upgradeContainer(const QString &serverId, DockerContainer container);
+
     ErrorCode rebootServer(const QString &serverId);
     ErrorCode removeAllContainers(const QString &serverId);
     ErrorCode removeContainer(const QString &serverId, DockerContainer container);
@@ -111,6 +115,13 @@ private:
     ErrorCode isServerDpkgBusy(const ServerCredentials &credentials, SshSession &sshSession);
     ErrorCode setupServerFirewall(const ServerCredentials &credentials, SshSession &sshSession);
     bool isReinstallContainerRequired(DockerContainer container, const ContainerConfig &oldConfig, const ContainerConfig &newConfig);
+
+    // Applies server settings that used to require a reinstall without regenerating keys and dropping users
+    ErrorCode updateContainerKeepingState(const ServerCredentials &credentials, DockerContainer container,
+                                          const ContainerConfig &oldConfig, ContainerConfig &newConfig, SshSession &sshSession);
+    // overlayFiles: path relative to /opt/amnezia -> content written over the restored state
+    ErrorCode upgradeContainerWorker(const ServerCredentials &credentials, DockerContainer container, const ContainerConfig &config,
+                                     const QMap<QString, QByteArray> &overlayFiles, SshSession &sshSession);
 
     ErrorCode prepareContainerConfig(DockerContainer container, const ServerCredentials &credentials, ContainerConfig &containerConfig, SshSession &sshSession);
 

@@ -2,6 +2,7 @@
 #define XRAY_CONFIGURATOR_H
 
 #include <QObject>
+#include <QJsonArray>
 #include <QJsonObject>
 
 #include "configuratorBase.h"
@@ -35,7 +36,18 @@ public:
                                                  amnezia::ContainerConfig &containerConfig,
                                                  const amnezia::DnsSettings &dnsSettings);
 
+    // server.json for new server settings that keeps the reality keys, every VLESS client and the SNIs served before.
+    // Also refreshes the client config of containerConfig. Used when the container is recreated with its state kept
+    amnezia::ErrorCode buildPreservedServerConfig(const amnezia::ServerCredentials &credentials,
+                                                  amnezia::DockerContainer container,
+                                                  amnezia::ContainerConfig &containerConfig,
+                                                  QByteArray &outServerConfig);
+
 private:
+    QJsonObject buildServerConfigJson(const amnezia::XrayServerConfig &srv, const QJsonArray &clients,
+                                      const QString &streamClientId, const QString &realityPrivateKey,
+                                      const QString &realityShortId, const QStringList &extraServerNames) const;
+
     amnezia::ErrorCode readContainerKeyFile(amnezia::DockerContainer container,
                                             const amnezia::ServerCredentials &credentials,
                                             const QString &path, QString &out) const;

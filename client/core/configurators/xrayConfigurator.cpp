@@ -169,10 +169,9 @@ ErrorCode XrayConfigurator::uploadServerConfigJson(const ServerCredentials &cred
         return errorCode;
     }
 
-    const QString restartScript = QStringLiteral("sudo docker restart $CONTAINER_NAME");
     errorCode = m_sshSession->runScript(
             credentials,
-            m_sshSession->replaceVars(restartScript,
+            m_sshSession->replaceVars(amnezia::xrayReloadScript(),
                                       amnezia::genBaseVars(credentials, container, dnsSettings.primaryDns,
                                                            dnsSettings.secondaryDns)));
     if (errorCode != ErrorCode::NoError) {
@@ -413,20 +412,6 @@ ErrorCode XrayConfigurator::writeServerConfigForSetup(const ServerCredentials &c
             return errorCode;
     }
 
-    QJsonObject streamSettings = buildStreamSettings(srv, clientId);
-    if (securityEff == QLatin1String("reality")) {
-        const QString siteEff = srv.site.isEmpty() ? QString::fromLatin1(px::defaultSite) : srv.site;
-        const QString sniEff = srv.sni.isEmpty() ? siteEff : srv.sni;
-        const QString fpEff = srv.fingerprint.isEmpty() ? QString::fromLatin1(px::defaultFingerprint) : srv.fingerprint;
-        QJsonObject rs;
-        rs[QStringLiteral("dest")] = siteEff + QStringLiteral(":443");
-        rs[px::fingerprint] = fpEff;
-        rs[QStringLiteral("privateKey")] = realityPrivateKey;
-        rs[px::serverNames] = QJsonArray { sniEff };
-        rs[QStringLiteral("shortIds")] = QJsonArray { realityShortId };
-        streamSettings[px::realitySettings] = rs;
-    }
-
     QJsonObject clientEntry;
     clientEntry[px::id] = clientId;
     const QString flowValue = effectiveClientFlow(srv);
@@ -434,21 +419,8 @@ ErrorCode XrayConfigurator::writeServerConfigForSetup(const ServerCredentials &c
         clientEntry[px::flow] = flowValue;
     }
 
-    QJsonObject settings;
-    settings[px::clients] = QJsonArray { clientEntry };
-    settings[QStringLiteral("decryption")] = QStringLiteral("none");
-
-    QJsonObject inbound;
-    inbound[px::port] = srv.port.isEmpty() ? QString(px::defaultPort).toInt() : srv.port.toInt();
-    inbound[QStringLiteral("protocol")] = QStringLiteral("vless");
-    inbound[px::settings] = settings;
-    inbound[px::streamSettings] = streamSettings;
-
-    QJsonObject serverConfig;
-    serverConfig[QStringLiteral("log")] = QJsonObject { { QStringLiteral("loglevel"), QStringLiteral("error") } };
-    serverConfig[px::inbounds] = QJsonArray { inbound };
-    serverConfig[px::outbounds] =
-            QJsonArray { QJsonObject { { QStringLiteral("protocol"), QStringLiteral("freedom") } } };
+    const QJsonObject serverConfig =
+            buildServerConfigJson(srv, QJsonArray { clientEntry }, clientId, realityPrivateKey, realityShortId, {});
 
     const QString json = QString::fromUtf8(QJsonDocument(serverConfig).toJson());
     errorCode = m_sshSession->uploadTextFileToContainer(container, credentials, json,
@@ -468,6 +440,126 @@ ErrorCode XrayConfigurator::writeServerConfigForSetup(const ServerCredentials &c
     }
     containerConfig.protocolConfig = updated;
     logger.info() << "Xray writeServerConfigForSetup: done, clientId=" << clientId;
+    return ErrorCode::NoError;
+}
+
+QJsonObject XrayConfigurator::buildServerConfigJson(const XrayServerConfig &srv, const QJsonArray &clients,
+                                                   const QString &streamClientId, const QString &realityPrivateKey,
+                                                   const QString &realityShortId, const QStringList &extraServerNames) const
+{
+    namespace px = amnezia::protocols::xray;
+
+    QJsonObject streamSettings = buildStreamSettings(srv, streamClientId);
+    if (effectiveSecurity(srv) == QLatin1String("reality")) {
+        const QString siteEff = srv.site.isEmpty() ? QString::fromLatin1(px::defaultSite) : srv.site;
+        const QString sniEff = srv.sni.isEmpty() ? siteEff : srv.sni;
+        const QString fpEff = srv.fingerprint.isEmpty() ? QString::fromLatin1(px::defaultFingerprint) : srv.fingerprint;
+
+        // the SNIs served before stay accepted, so configs issued earlier keep connecting after the site changes
+        QJsonArray serverNames { sniEff };
+        for (const QString &name : extraServerNames) {
+            if (!name.isEmpty() && !serverNames.contains(name)) {
+                serverNames.append(name);
+            }
+        }
+
+        QJsonObject rs;
+        rs[QStringLiteral("dest")] = siteEff + QStringLiteral(":443");
+        rs[px::fingerprint] = fpEff;
+        rs[QStringLiteral("privateKey")] = realityPrivateKey;
+        rs[px::serverNames] = serverNames;
+        rs[QStringLiteral("shortIds")] = QJsonArray { realityShortId };
+        streamSettings[px::realitySettings] = rs;
+    }
+
+    QJsonObject settings;
+    settings[px::clients] = clients;
+    settings[QStringLiteral("decryption")] = QStringLiteral("none");
+
+    QJsonObject inbound;
+    inbound[px::port] = srv.port.isEmpty() ? QString(px::defaultPort).toInt() : srv.port.toInt();
+    inbound[QStringLiteral("protocol")] = QStringLiteral("vless");
+    inbound[px::settings] = settings;
+    inbound[px::streamSettings] = streamSettings;
+
+    QJsonObject serverConfig;
+    serverConfig[QStringLiteral("log")] = QJsonObject { { QStringLiteral("loglevel"), QStringLiteral("error") } };
+    serverConfig[px::inbounds] = QJsonArray { inbound };
+    serverConfig[px::outbounds] =
+            QJsonArray { QJsonObject { { QStringLiteral("protocol"), QStringLiteral("freedom") } } };
+    return serverConfig;
+}
+
+ErrorCode XrayConfigurator::buildPreservedServerConfig(const ServerCredentials &credentials, DockerContainer container,
+                                                       ContainerConfig &containerConfig, QByteArray &outServerConfig)
+{
+    namespace px = amnezia::protocols::xray;
+
+    const auto *xrayCfg = containerConfig.protocolConfig.as<XrayProtocolConfig>();
+    if (!xrayCfg || xrayCfg->serverConfig.isThirdPartyConfig) {
+        return ErrorCode::InternalError;
+    }
+    const XrayServerConfig &srv = xrayCfg->serverConfig;
+
+    ErrorCode errorCode = ErrorCode::NoError;
+    const QByteArray currentConfig =
+            m_sshSession->getTextFileFromContainer(container, credentials, px::serverConfigPath, errorCode);
+    if (errorCode != ErrorCode::NoError) {
+        return errorCode;
+    }
+
+    const QJsonObject inbound = QJsonDocument::fromJson(currentConfig).object().value(px::inbounds).toArray().first().toObject();
+    const QJsonArray currentClients = inbound.value(px::settings).toObject().value(px::clients).toArray();
+    if (currentClients.isEmpty()) {
+        return ErrorCode::XrayServerNoVlessClients;
+    }
+
+    QStringList previousServerNames;
+    const QJsonObject currentReality = inbound.value(px::streamSettings).toObject().value(px::realitySettings).toObject();
+    for (const QJsonValue &name : currentReality.value(px::serverNames).toArray()) {
+        previousServerNames.append(name.toString());
+    }
+
+    const QString flowValue = effectiveClientFlow(srv);
+    QJsonArray clients;
+    for (const QJsonValue &value : currentClients) {
+        QJsonObject client = value.toObject();
+        if (flowValue.isEmpty()) {
+            client.remove(px::flow);
+        } else {
+            client[px::flow] = flowValue;
+        }
+        clients.append(client);
+    }
+
+    QString primaryClientId;
+    if (readContainerKeyFile(container, credentials, QString::fromLatin1(px::uuidPath), primaryClientId) != ErrorCode::NoError
+        || primaryClientId.isEmpty()) {
+        primaryClientId = clients.first().toObject().value(px::id).toString();
+    }
+
+    QString realityPrivateKey;
+    QString realityPublicKey;
+    QString realityShortId;
+    if (effectiveSecurity(srv) == QLatin1String("reality")) {
+        errorCode = readContainerKeyFile(container, credentials, QString::fromLatin1(px::PrivateKeyPath), realityPrivateKey);
+        if (errorCode != ErrorCode::NoError)
+            return errorCode;
+        errorCode = readRealityKeyFiles(container, credentials, realityPublicKey, realityShortId);
+        if (errorCode != ErrorCode::NoError)
+            return errorCode;
+    }
+
+    outServerConfig = QJsonDocument(buildServerConfigJson(srv, clients, primaryClientId, realityPrivateKey, realityShortId,
+                                                          previousServerNames))
+                              .toJson();
+
+    XrayProtocolConfig updated =
+            buildClientProtocolConfig(credentials, container, srv, primaryClientId, errorCode, realityPublicKey, realityShortId);
+    if (errorCode != ErrorCode::NoError) {
+        return errorCode;
+    }
+    containerConfig.protocolConfig = updated;
     return ErrorCode::NoError;
 }
 

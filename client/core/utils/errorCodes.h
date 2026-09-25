@@ -40,6 +40,8 @@ namespace amnezia
         XrayRealityKeysReadFailed = 217,
         ServerContainerRuntimeNotSupported = 218,
         ContainerRuntimeServiceNotRunning = 219,
+        ServerUpgradeFailed = 220,
+        ServerUpgradeRolledBack = 221,
 
         // Ssh connection errors
         SshRequestDeniedError = 300,

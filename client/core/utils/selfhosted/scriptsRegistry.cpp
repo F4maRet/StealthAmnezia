@@ -60,6 +60,7 @@ QString amnezia::scriptName(SharedScriptType type)
     case SharedScriptType::check_connection: return QLatin1String("check_connection.sh");
     case SharedScriptType::check_server_is_busy: return QLatin1String("check_server_is_busy.sh");
     case SharedScriptType::check_user_in_sudo: return QLatin1String("check_user_in_sudo.sh");
+    case SharedScriptType::upgrade_container: return QLatin1String("upgrade_container.sh");
     default: return QString();
     }
 }
@@ -466,4 +467,10 @@ amnezia::ScriptVars amnezia::genProtocolVarsForContainer(DockerContainer contain
     }
 
     return vars;
+}
+
+QString amnezia::xrayReloadScript()
+{
+    return QStringLiteral("sudo docker exec -i $CONTAINER_NAME sh -c '[ -f /opt/amnezia/.xray-supervised ] && pkill -x xray' "
+                          "|| sudo docker restart $CONTAINER_NAME");
 }

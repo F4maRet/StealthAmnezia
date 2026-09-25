@@ -18,6 +18,7 @@ PageType {
     id: root
 
     property bool isUnsupportedContainer: ContainerProps.isUnsupportedContainer(ServersUiController.processedContainerIndex)
+    property bool isUpgradeVisible: !isUnsupportedContainer && ServersUiController.isProcessedServerHasWriteAccess()
     property bool isClearCacheVisible: !isUnsupportedContainer && ServersUiController.isProcessedServerHasWriteAccess() && !ContainersModel.isServiceContainer(ServersUiController.processedContainerIndex)
     property bool isOutdatedAwgContainer: ServersUiController.isProcessedContainerOutdatedAwg()
 
@@ -190,7 +191,7 @@ PageType {
 
                 Layout.fillWidth: true
 
-                visible: root.isClearCacheVisible
+                visible: root.isUpgradeVisible
 
                 text: qsTr("Update on server")
                 descriptionText: qsTr("Rebuild the protocol with the latest version. Keys and users are kept")
@@ -204,7 +205,7 @@ PageType {
 
                     var yesButtonFunction = function() {
                         PageController.goToPage(PageEnum.PageSetupWizardInstalling)
-                        InstallController.upgradeProcessedContainer()
+                        InstallController.upgradeContainer(ServersUiController.processedServerId, ServersUiController.processedContainerIndex)
                     }
                     var noButtonFunction = function() {
                     }
@@ -220,7 +221,7 @@ PageType {
             }
 
             DividerType {
-                visible: root.isClearCacheVisible
+                visible: root.isUpgradeVisible
             }
 
             LabelWithButtonType {

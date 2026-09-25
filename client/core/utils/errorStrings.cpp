@@ -41,6 +41,8 @@ QString errorString(ErrorCode code) {
         break;
     case(ErrorCode::ServerContainerRuntimeNotSupported): errorMessage = QObject::tr("Server error: The default container runtime available for installation on this server is not supported.\n Install Docker Engine on the server manually and try again."); break;
     case(ErrorCode::ContainerRuntimeServiceNotRunning): errorMessage = QObject::tr("Container runtime error: The container runtime service is not running.\n Check the container runtime service on the server, or wait about a minute and try again."); break;
+    case(ErrorCode::ServerUpgradeFailed): errorMessage = QObject::tr("Server update failed before any change was made, the protocol keeps working as before"); break;
+    case(ErrorCode::ServerUpgradeRolledBack): errorMessage = QObject::tr("Updated container failed the health check, the previous version was restored"); break;
 
     // Libssh errors
     case(ErrorCode::SshRequestDeniedError): errorMessage = QObject::tr("SSH request was denied"); break;

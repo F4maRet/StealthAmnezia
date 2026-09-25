@@ -715,10 +715,9 @@ ErrorCode UsersController::revokeXray(const int row,
         logger.error() << "Failed to upload the clientsTable file";
     }
 
-    QString restartScript = QString("sudo docker restart $CONTAINER_NAME");
     error = sshSession->runScript(
         credentials,
-        sshSession->replaceVars(restartScript, amnezia::genBaseVars(credentials, container, QString(), QString()))
+        sshSession->replaceVars(amnezia::xrayReloadScript(), amnezia::genBaseVars(credentials, container, QString(), QString()))
     );
     if (error != ErrorCode::NoError) {
         logger.error() << "Failed to restart xray container";

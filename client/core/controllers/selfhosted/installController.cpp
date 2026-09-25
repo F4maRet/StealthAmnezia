@@ -32,6 +32,7 @@
 #include "core/repositories/secureServersRepository.h"
 #include "core/repositories/secureAppSettingsRepository.h"
 #include "core/utils/selfhosted/scriptsRegistry.h"
+#include "core/utils/selfhosted/serverStatePatcher.h"
 #include "core/utils/selfhosted/sshClient.h"
 #include "logger.h"
 #include "core/utils/protocolEnum.h"
@@ -199,8 +200,18 @@ ErrorCode InstallController::updateServerConfig(const QString &serverId, DockerC
     bool reinstallRequired = isReinstallContainerRequired(container, oldConfig, newConfig);
     qDebug() << "InstallController::updateServerConfig for container" << container << "reinstall required is" << reinstallRequired;
 
+    const bool preserveState = reinstallRequired && serverstate::canPreserveState(container, oldConfig, newConfig);
+
     ErrorCode errorCode = ErrorCode::NoError;
-    if (reinstallRequired) {
+    if (preserveState) {
+        errorCode = updateContainerKeepingState(credentials, container, oldConfig, newConfig, sshSession);
+
+        if (errorCode == ErrorCode::NoError && container == DockerContainer::Awg2) {
+            if (auto *awgConfig = newConfig.getAwgProtocolConfig(); awgConfig && awgConfig->serverConfig.hasAwg3Params()) {
+                awgConfig->serverConfig.protocolVersion = protocols::awg::awgV3;
+            }
+        }
+    } else if (reinstallRequired) {
         errorCode = setupContainer(credentials, container, newConfig, true);
 
         // Reinstall pulls the latest container image, so the server runs the latest protocol version
@@ -231,7 +242,8 @@ ErrorCode InstallController::updateServerConfig(const QString &serverId, DockerC
         } else if (container == DockerContainer::TProxy) {
             TProxyInstaller::uploadClientSettingsSnapshot(sshSession, credentials, container, newConfig);
         }
-        if (reinstallRequired) {
+        // the xray client config was refreshed in place for the same client id, revoking it would lock the admin out
+        if (reinstallRequired && !(preserveState && container == DockerContainer::Xray)) {
             clearCachedProfile(serverId, container);
         }
         adminConfig->updateContainerConfig(container, newConfig);
@@ -805,6 +817,143 @@ bool InstallController::isReinstallContainerRequired(DockerContainer container, 
     }
 
     return false;
+}
+
+ErrorCode InstallController::updateContainerKeepingState(const ServerCredentials &credentials, DockerContainer container,
+                                                         const ContainerConfig &oldConfig, ContainerConfig &newConfig,
+                                                         SshSession &sshSession)
+{
+    const Proto mainProto = ContainerUtils::defaultProtocol(container);
+    const QString defaultPort = QString::number(ProtocolUtils::defaultPort(mainProto));
+    auto portOf = [&defaultPort](const ContainerConfig &config) {
+        const QString port = config.protocolConfig.port();
+        return port.isEmpty() ? defaultPort : port;
+    };
+    if (portOf(oldConfig) != portOf(newConfig)) {
+        ErrorCode e = isServerPortBusy(credentials, container, newConfig, sshSession);
+        if (e)
+            return e;
+    }
+
+    QMap<QString, QByteArray> overlayFiles;
+    const QString stateRoot = QStringLiteral("/opt/amnezia/");
+
+    if (container == DockerContainer::Xray) {
+        XrayConfigurator xrayConfigurator(&sshSession);
+        QByteArray serverConfig;
+        ErrorCode e = xrayConfigurator.buildPreservedServerConfig(credentials, container, newConfig, serverConfig);
+        if (e)
+            return e;
+        overlayFiles.insert(QString(protocols::xray::serverConfigPath).mid(stateRoot.size()), serverConfig);
+    } else {
+        const QString configPath = serverstate::wireguardServerConfigPath(container);
+        ErrorCode e = ErrorCode::NoError;
+        const QByteArray serverConfig = sshSession.getTextFileFromContainer(container, credentials, configPath, e);
+        if (e)
+            return e;
+
+        bool ok = false;
+        const QByteArray patched = serverstate::patchWireguardServerConfig(container, serverConfig, newConfig, ok);
+        if (!ok) {
+            logger.error() << "Unable to patch" << configPath << "keeping the container untouched";
+            return ErrorCode::ServerUpgradeFailed;
+        }
+        overlayFiles.insert(configPath.mid(stateRoot.size()), patched);
+    }
+
+    return upgradeContainerWorker(credentials, container, newConfig, overlayFiles, sshSession);
+}
+
+ErrorCode InstallController::upgradeContainerWorker(const ServerCredentials &credentials, DockerContainer container,
+                                                    const ContainerConfig &config, const QMap<QString, QByteArray> &overlayFiles,
+                                                    SshSession &sshSession)
+{
+    qDebug().noquote() << "InstallController::upgradeContainerWorker" << ContainerUtils::containerToString(container);
+
+    ErrorCode e = isUserInSudo(credentials, sshSession);
+    if (e)
+        return e;
+
+    e = prepareHostWorker(credentials, container, sshSession);
+    if (e)
+        return e;
+
+    amnezia::ScriptVars vars = amnezia::genBaseVars(credentials, container, m_appSettingsRepository->primaryDns(),
+                                                    m_appSettingsRepository->secondaryDns());
+    vars.append(amnezia::genProtocolVarsForContainer(container, config));
+
+    const QString dockerfileFolder = "/opt/amnezia/" + ContainerUtils::containerToString(container);
+    const QString workDir = dockerfileFolder + "/upgrade";
+
+    e = sshSession.runScript(credentials,
+                             QString("sudo rm -rf %1 && mkdir -p %1/overlay && sudo rm -f %2/Dockerfile").arg(workDir, dockerfileFolder));
+    if (e)
+        return e;
+
+    QMap<QString, QByteArray> files;
+    files.insert(dockerfileFolder + "/Dockerfile", amnezia::scriptData(ProtocolScriptType::dockerfile, container).toUtf8());
+    files.insert(workDir + "/run.sh",
+                 SshSession::replaceVars(amnezia::scriptData(ProtocolScriptType::run_container, container), vars).toUtf8());
+    files.insert(workDir + "/start.sh",
+                 SshSession::replaceVars(amnezia::scriptData(ProtocolScriptType::container_startup, container), vars).toUtf8());
+
+    QString upgradeScript = amnezia::scriptData(SharedScriptType::upgrade_container);
+    upgradeScript.replace("$UPGRADE_HEALTH_CHECK", serverstate::healthCheckCommand(container));
+    files.insert(workDir + "/upgrade.sh", SshSession::replaceVars(upgradeScript, vars).toUtf8());
+
+    for (auto it = overlayFiles.cbegin(); it != overlayFiles.cend(); ++it) {
+        const QString path = workDir + "/overlay/" + it.key();
+        e = sshSession.runScript(credentials, QString("mkdir -p \"$(dirname %1)\"").arg(path));
+        if (e)
+            return e;
+        files.insert(path, it.value());
+    }
+
+    for (auto it = files.cbegin(); it != files.cend(); ++it) {
+        e = sshSession.uploadFileToHost(credentials, it.value(), it.key());
+        if (e)
+            return e;
+    }
+
+    QString stdOut;
+    auto cbReadStd = [&](const QString &data, libssh::Client &) {
+        stdOut += data + "\n";
+        return ErrorCode::NoError;
+    };
+
+    // nohup keeps the transaction running to the end even if the ssh session drops in the middle
+    e = sshSession.runScript(credentials,
+                             QString("sudo nohup bash %1/upgrade.sh > %1/upgrade.log 2>&1 < /dev/null; cat %1/upgrade.log").arg(workDir),
+                             cbReadStd, cbReadStd);
+    qDebug().noquote() << "InstallController::upgradeContainerWorker" << stdOut;
+    if (e)
+        return e;
+
+    if (!stdOut.contains("UPGRADE_OK")) {
+        if (stdOut.contains("have reached") && stdOut.contains("pull rate limit"))
+            return ErrorCode::DockerPullRateLimit;
+        if (stdOut.contains("UPGRADE_ROLLED_BACK"))
+            return ErrorCode::ServerUpgradeRolledBack;
+        return ErrorCode::ServerUpgradeFailed;
+    }
+
+    setupServerFirewall(credentials, sshSession);
+    return ErrorCode::NoError;
+}
+
+ErrorCode InstallController::upgradeContainer(const QString &serverId, DockerContainer container)
+{
+    auto adminConfig = m_serversRepository->selfHostedAdminConfig(serverId);
+    if (!adminConfig.has_value()) {
+        return ErrorCode::InternalError;
+    }
+    ServerCredentials credentials = adminConfig->credentials();
+    if (!credentials.isValid()) {
+        return ErrorCode::InternalError;
+    }
+
+    SshSession sshSession;
+    return upgradeContainerWorker(credentials, container, adminConfig->containerConfig(container), {}, sshSession);
 }
 
 void InstallController::cancelInstallation()

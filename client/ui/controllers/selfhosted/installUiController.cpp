@@ -557,6 +557,29 @@ void InstallUiController::removeContainer(const QString &serverId, int container
     emit installationErrorOccurred(errorCode);
 }
 
+void InstallUiController::upgradeContainer(const QString &serverId, int containerIndex)
+{
+    const DockerContainer container = static_cast<DockerContainer>(containerIndex);
+    const QString containerName = ContainerUtils::containerHumanNames().value(container);
+
+    auto *watcher = new QFutureWatcher<ErrorCode>(this);
+    QObject::connect(watcher, &QFutureWatcher<ErrorCode>::finished, this, [this, watcher, containerName]() {
+        const ErrorCode errorCode = watcher->result();
+        watcher->deleteLater();
+
+        if (errorCode == ErrorCode::NoError) {
+            emit updateContainerFinished(tr("%1 has been updated on the server, all users are kept").arg(containerName), true);
+        } else {
+            emit installationErrorOccurred(errorCode);
+        }
+    });
+
+    InstallController *installController = m_installController;
+    watcher->setFuture(QtConcurrent::run([installController, serverId, container]() -> ErrorCode {
+        return installController->upgradeContainer(serverId, container);
+    }));
+}
+
 void InstallUiController::clearCachedProfile(const QString &serverId, int containerIndex)
 {
     DockerContainer container = static_cast<DockerContainer>(containerIndex);
