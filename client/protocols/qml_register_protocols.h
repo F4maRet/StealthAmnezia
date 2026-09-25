@@ -1,23 +1,44 @@
 #ifndef QML_REGISTER_PROTOCOLS_H
 #define QML_REGISTER_PROTOCOLS_H
 
+#include "protocols_defs.h"
+
+#include <QObject>
+#include <QDebug>
 #include <QQmlEngine>
 
-#include "protocols_defs.h"
-#include "awgprotocol.h"
-#include "xrayprotocol.h"
+namespace amnezia {
 
-inline void registerProtocolsTypes()
-{
-    qmlRegisterType<amnezia::AwgProtocol>("Amnezia", 1, 0, "AwgProtocol");
-    qmlRegisterType<amnezia::XrayProtocol>("Amnezia", 1, 0, "XrayProtocol");
+using namespace amnezia::ProtocolEnumNS;
 
-    // StealthAmnezia: только эти два протокола
-    qRegisterMetaType<amnezia::config_key::Awg>("AwgConfig");
-    qRegisterMetaType<amnezia::config_key::Xray>("XrayConfig");
+void declareQmlProtocolEnum() {
+    qmlRegisterUncreatableMetaObject(
+        ProtocolEnumNS::staticMetaObject,
+        "ProtocolEnum",
+        1, 0,
+        "ProtocolEnum",
+        "Error: only enums"
+        );
 
-    qmlRegisterType<amnezia::HybridProtocol>("Amnezia", 1, 0, "HybridProtocol");
-    qRegisterMetaType<amnezia::HybridProtocol*>("HybridProtocol*");
+    qmlRegisterUncreatableMetaObject(
+        ProtocolEnumNS::staticMetaObject,
+        "ProtocolEnum",
+        1, 0,
+        "TransportProto",
+        "Error: only enums"
+        );
+
+    qmlRegisterUncreatableMetaObject(
+        ProtocolEnumNS::staticMetaObject,
+        "ProtocolEnum",
+        1, 0,
+        "ServiceType",
+        "Error: only enums"
+        );
 }
+
+} // namespace amnezia
+
+QDebug operator<<(QDebug debug, const amnezia::Proto &p);
 
 #endif // QML_REGISTER_PROTOCOLS_H
