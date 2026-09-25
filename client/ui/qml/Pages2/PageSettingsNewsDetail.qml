@@ -34,7 +34,7 @@ PageType {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.topMargin: 20 + SettingsController.safeAreaTopMargin
+        anchors.topMargin: 20 + PageController.safeAreaTopMargin
     }
 
     FlickableType {
@@ -54,7 +54,7 @@ PageType {
                 Layout.fillWidth: true
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
-                headerText: newsItem.title
+                headerText: newsItem ? newsItem.title : ""
             }
 
             ParagraphTextType {
@@ -62,7 +62,7 @@ PageType {
                 Layout.topMargin: 16
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
-                text: newsItem.content
+                text: newsItem ? newsItem.content : ""
 
                 textFormat: Text.RichText
 
@@ -76,6 +76,7 @@ PageType {
                     cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor
                 }
             }
+
         }
     }
 } 

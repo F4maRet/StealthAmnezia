@@ -5,7 +5,9 @@
 #include <QJsonArray>
 #include <QJsonObject>
 
-#include "core/api/apiDefs.h"
+#include "core/utils/serverConfigUtils.h"
+#include "core/utils/constants/apiKeys.h"
+#include "core/utils/constants/apiConstants.h"
 
 class ApiAccountInfoModel : public QAbstractListModel
 {
@@ -18,10 +20,11 @@ public:
         ServiceDescriptionRole,
         EndDateRole,
         IsComponentVisibleRole,
+        IsSubscriptionRenewalAvailableRole,
         HasExpiredWorkerRole,
-        IsProtocolSelectionSupportedRole,
         IsSubscriptionExpiredRole,
-        IsSubscriptionExpiringSoonRole
+        IsSubscriptionExpiringSoonRole,
+        IsInAppPurchaseRole
     };
 
     explicit ApiAccountInfoModel(QObject *parent = nullptr);
@@ -52,11 +55,12 @@ private:
         int activeDeviceCount;
         int maxDeviceCount;
 
-        apiDefs::ConfigType configType;
-
-        QStringList supportedProtocols;
+        serverConfigUtils::ConfigType configType;
 
         QString subscriptionDescription;
+
+        bool isInAppPurchase = false;
+        bool isRenewalAvailable = false;
     };
 
     AccountInfoData m_accountInfoData;

@@ -15,8 +15,8 @@ ipt INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 ipt INPUT -p icmp -j ACCEPT
 ipt INPUT -p tcp --dport 80 -j ACCEPT
 ipt INPUT -p tcp --dport 443 -j ACCEPT
-# the configured port was dropped by the policy below when it differed from 443
 ipt INPUT -p tcp --dport $XRAY_SERVER_PORT -j ACCEPT
+ipt INPUT -p udp --dport $XRAY_SERVER_PORT -j ACCEPT
 iptables -P INPUT DROP
 
 ip6t INPUT -i lo -j ACCEPT

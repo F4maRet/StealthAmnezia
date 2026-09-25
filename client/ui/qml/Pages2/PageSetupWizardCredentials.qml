@@ -19,7 +19,7 @@ PageType {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.topMargin: 20 + SettingsController.safeAreaTopMargin
+        anchors.topMargin: 20 + PageController.safeAreaTopMargin
 
         onFocusChanged: {
             if (this.activeFocus) {
@@ -94,7 +94,7 @@ PageType {
                 visible: title === qsTr("Password or SSH private key")
                 backGroundColor: AmneziaStyle.color.translucentWhite
                 iconPath: "qrc:/images/controls/alert-circle.svg"
-                textString: qsTr("SSH key requirements: supported ED25519 or RSA in PEM. Paste the private key including BEGIN/END lines. If your key doesn’t work, generate a compatible one.")
+                textString: qsTr("SSH key requirements: supported key types are ED25519 and RSA in PEM format. Paste the private key, including the BEGIN/END lines. If your key doesn’t work, generate a compatible one")
             }
         }
 
@@ -116,12 +116,12 @@ PageType {
                         return
                     }
 
-                    InstallController.setShouldCreateServer(true)
                     var _hostname = listView.itemAtIndex(vars.hostnameIndex).children[0].textField.text
                     var _username = listView.itemAtIndex(vars.usernameIndex).children[0].textField.text
                     var _secretData = listView.itemAtIndex(vars.secretDataIndex).children[0].textField.text
 
                     InstallController.setProcessedServerCredentials(_hostname, _username, _secretData)
+                    ServersUiController.setProcessedServerId("")
 
                     PageController.showBusyIndicator(true)
                     var isConnectionOpened = InstallController.checkSshConnection()
@@ -145,6 +145,30 @@ PageType {
             }
 
             CardWithIconsType {
+                id: hostLink
+
+                visible: GC.isDesktop() && !IsMacOsNeBuild
+
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                Layout.bottomMargin: 8
+
+                headerText: qsTr("Don't have a server?")
+                bodyText: qsTr("Amnezia hosting. VPN servers without complicated settings and headaches")
+
+                rightImageSource: "qrc:/images/controls/chevron-right.svg"
+                leftImageSource: "qrc:/images/controls/amnezia.svg"
+
+                onClicked: {
+                    Qt.openUrlExternally(LanguageUiController.getCurrentHostUrl())
+                }
+
+                Keys.onEnterPressed: this.clicked()
+                Keys.onReturnPressed: this.clicked()
+            }
+
+            CardWithIconsType {
                 id: siteLink
 
                 Layout.fillWidth: true
@@ -159,7 +183,7 @@ PageType {
                 leftImageSource: "qrc:/images/controls/help-circle.svg"
 
                 onClicked: {
-                    Qt.openUrlExternally(LanguageModel.getCurrentSiteUrl("starter-guide"))
+                    Qt.openUrlExternally(LanguageUiController.getCurrentSiteUrl("starter-guide"))
                 }
 
                 Keys.onEnterPressed: this.clicked()

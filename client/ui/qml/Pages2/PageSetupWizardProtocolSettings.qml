@@ -35,7 +35,7 @@ PageType {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.topMargin: 20 + SettingsController.safeAreaTopMargin
+        anchors.topMargin: 20 + PageController.safeAreaTopMargin
 
         onFocusChanged: {
             if (this.activeFocus) {
@@ -206,6 +206,7 @@ PageType {
             TextFieldWithHeaderType {
                 id: port
 
+                visible: !isTProxy
                 Layout.fillWidth: true
                 Layout.topMargin: 16
                 Layout.rightMargin: 16
@@ -214,6 +215,80 @@ PageType {
                 headerText: qsTr("Port")
                 textField.maximumLength: 5
                 textField.validator: IntValidator { bottom: 1; top: 65535 }
+            }
+
+            TextFieldWithHeaderType {
+                id: tproxyHostname
+
+                visible: isTProxy
+                Layout.fillWidth: true
+                Layout.topMargin: 16
+                Layout.rightMargin: 16
+                Layout.leftMargin: 16
+
+                headerText: qsTr("Hostname")
+                textField.placeholderText: qsTr("proxy.example.com")
+                textField.onTextChanged: {
+                    var cur = tproxyHostname.textField.text
+                    var clean = TProxyConfigModel.sanitizeHostnameFieldText(cur)
+                    if (clean !== cur) {
+                        textField.text = clean
+                        textField.cursorPosition = clean.length
+                        return
+                    }
+                    if (TProxyConfigModel.isHostnameTypingIncomplete(cur)) {
+                        tproxyHostname.errorText = ""
+                        return
+                    }
+                    if (!TProxyConfigModel.isValidHostname(clean)) {
+                        tproxyHostname.errorText = qsTr("Use lowercase letters, digits, dots and hyphens")
+                        return
+                    }
+                    tproxyHostname.errorText = ""
+                }
+            }
+
+            TextFieldWithHeaderType {
+                id: tproxyEmail
+
+                visible: isTProxy
+                Layout.fillWidth: true
+                Layout.topMargin: 16
+                Layout.rightMargin: 16
+                Layout.leftMargin: 16
+
+                headerText: qsTr("ACME email")
+                textField.placeholderText: qsTr("you@example.com")
+                textField.onTextChanged: {
+                    var cur = tproxyEmail.textField.text
+                    var clean = TProxyConfigModel.sanitizeAcmeEmailFieldText(cur)
+                    if (clean !== cur) {
+                        textField.text = clean
+                        textField.cursorPosition = clean.length
+                        return
+                    }
+                    if (TProxyConfigModel.isAcmeEmailTypingIncomplete(cur)) {
+                        tproxyEmail.errorText = ""
+                        return
+                    }
+                    if (!TProxyConfigModel.isValidAcmeEmail(clean)) {
+                        tproxyEmail.errorText = qsTr("Enter a valid email for the TLS certificate")
+                        return
+                    }
+                    tproxyEmail.errorText = ""
+                }
+            }
+
+            CaptionTextType {
+                visible: isTProxy
+                Layout.fillWidth: true
+                Layout.topMargin: 8
+                Layout.rightMargin: 16
+                Layout.leftMargin: 16
+                text: qsTr("Needs a DNS A record and free, internet-reachable ports 443 (HTTPS) and 80 (ACME). If either port is busy or blocked, the proxy will not work. Classic Telegram MTProxy links will not work.")
+                color: AmneziaStyle.color.goldenApricot
+                wrapMode: Text.WordWrap
+                font.pixelSize: 12
             }
 
             Rectangle {
@@ -235,7 +310,35 @@ PageType {
                 text: qsTr("Install")
 
                 clickedFunc: function() {
-                    if (!port.textField.acceptableInput &&
+                    if (isTProxy) {
+                        tproxyHostname.errorText = ""
+                        tproxyEmail.errorText = ""
+
+                        var host = TProxyConfigModel.sanitizeHostnameFieldText(tproxyHostname.textField.text)
+                        var email = TProxyConfigModel.sanitizeAcmeEmailFieldText(tproxyEmail.textField.text)
+                        tproxyHostname.textField.text = host
+                        tproxyEmail.textField.text = email
+
+                        var hasError = false
+
+                        if (!TProxyConfigModel.isValidHostname(host)) {
+                            tproxyHostname.errorText = qsTr("Enter a lowercase DNS hostname")
+                            hasError = true
+                        }
+                        if (!TProxyConfigModel.isValidAcmeEmail(email)) {
+                            tproxyEmail.errorText = qsTr("Enter a valid email for the TLS certificate")
+                            hasError = true
+                        }
+                        if (hasError) {
+                            return
+                        }
+
+                        port.textField.text = TProxyConfigModel.defaultPort()
+                        TProxyConfigModel.setHostname(host)
+                        TProxyConfigModel.setAcmeEmail(email)
+                        TProxyConfigModel.setPort(TProxyConfigModel.defaultPort())
+                        TProxyConfigModel.setHttpPort(TProxyConfigModel.defaultHttpPort())
+                    } else if (!port.textField.acceptableInput &&
                             ContainerProps.containerTypeToString(dockerContainer) !== "torwebsite" &&
                             ContainerProps.containerTypeToString(dockerContainer) !== "ikev2") {
                         port.errorText = qsTr("The port must be in the range of 1 to 65535")
@@ -243,22 +346,22 @@ PageType {
                     }
 
                     PageController.goToPage(PageEnum.PageSetupWizardInstalling);
-                    InstallController.install(dockerContainer, port.textField.text, transportProtoSelector.currentIndex)
+                    InstallController.install(dockerContainer, port.textField.text, transportProtoSelector.currentIndex, ServersUiController.processedServerId)
                 }
             }
 
             Component.onCompleted: {
                 var defaultContainerProto =  ContainerProps.defaultProtocol(dockerContainer)
 
-                if (ProtocolProps.defaultPort(defaultContainerProto) < 0) {
+                if (InstallController.defaultPort(defaultContainerProto) < 0) {
                     port.visible = false
                 } else {
-                    port.textField.text = ProtocolProps.getPortForInstall(defaultContainerProto)
+                    port.textField.text = InstallController.getPortForInstall(defaultContainerProto)
                 }
-                transportProtoSelector.currentIndex = ProtocolProps.defaultTransportProto(defaultContainerProto)
+                transportProtoSelector.currentIndex = InstallController.defaultTransportProto(defaultContainerProto)
 
-                port.enabled = ProtocolProps.defaultPortChangeable(defaultContainerProto)
-                var protocolSelectorVisible = ProtocolProps.defaultTransportProtoChangeable(defaultContainerProto)
+                port.enabled = InstallController.defaultPortChangeable(defaultContainerProto)
+                var protocolSelectorVisible = InstallController.defaultTransportProtoChangeable(defaultContainerProto)
                 transportProtoSelector.visible = protocolSelectorVisible
                 transportProtoHeader.visible = protocolSelectorVisible
             }

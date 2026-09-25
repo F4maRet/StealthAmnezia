@@ -21,7 +21,7 @@ PageType {
 
         readonly property string title: qsTr("Telegram")
         readonly property string description: "@" + ApiAccountInfoModel.getTelegramBotLink()
-        readonly property string link: "https://t.me/" + ApiAccountInfoModel.getTelegramBotLink()
+        readonly property string link: "https://telegram.me/" + ApiAccountInfoModel.getTelegramBotLink()
     }
 
     QtObject {
@@ -59,7 +59,7 @@ PageType {
         id: listView
 
         anchors.fill: parent
-        anchors.topMargin: 20 + SettingsController.safeAreaTopMargin
+        anchors.topMargin: 20 + PageController.safeAreaTopMargin
         anchors.bottomMargin: 24
 
         model: supportModel

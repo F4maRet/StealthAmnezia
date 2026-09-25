@@ -47,13 +47,13 @@ Window  {
         interval: 150
         repeat: false
         onTriggered: {
-            if (Qt.platform.os === "android" && SettingsController.isEdgeToEdgeEnabled()) {
+            if (Qt.platform.os === "android" && PageController.isEdgeToEdgeEnabled()) {
                 console.log("QML: Application resumed with edge-to-edge")
             }
         }
     }
 
-    visible: true
+    visible: !GC.isDesktop()
     width: GC.screenWidth
     height: GC.screenHeight
     minimumWidth: GC.isDesktop() ? 360 : 0
@@ -144,6 +144,7 @@ Window  {
             busyIndicator.visible = visible
             PageController.disableControls(visible)
         }
+
     }
 
     Connections {
@@ -173,6 +174,15 @@ Window  {
 
         PopupType {
             id: popupNotificationMessage
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    popupNotificationMessage.close()
+                    popupNotificationTimer.stop()
+                }
+            }
         }
 
         Timer {
@@ -202,6 +212,27 @@ Window  {
     }
 
     Item {
+        objectName: "captchaDialogItem"
+
+        anchors.fill: parent
+
+        CaptchaDialogType {
+            id: captchaDialog
+
+            onCaptchaSolved: function(captchaId, solution) {
+                PageController.showBusyIndicator(true)
+                Qt.callLater(function() {
+                    SubscriptionUiController.onCaptchaSolved(captchaId, solution)
+                })
+            }
+
+            onRefreshCaptchaRequested: function() {
+                SubscriptionUiController.onRefreshCaptchaRequested()
+            }
+        }
+    }
+
+    Item {
         objectName: "privateKeyPassphraseDrawerItem"
 
         anchors.fill: parent
@@ -209,8 +240,10 @@ Window  {
         DrawerType2 {
             id: privateKeyPassphraseDrawer
 
+            property bool isCloseByUser: false
+
             anchors.fill: parent
-            expandedHeight: root.height * 0.35 + SettingsController.safeAreaBottomMargin + SettingsController.imeHeight
+            expandedHeight: root.height * 0.35 + PageController.safeAreaBottomMargin + PageController.imeHeight
 
             expandedStateContent: ColumnLayout {
                 anchors.top: parent.top
@@ -228,6 +261,11 @@ Window  {
                     }
 
                     function onAboutToHide() {
+                        if (privateKeyPassphraseDrawer.isCloseByUser === false) {
+                            privateKeyPassphraseDrawer.isCloseByUser = true
+                            PageController.passphraseRequestDrawerClosed("")
+                        }
+
                         if (passphrase.textField.text !== "") {
                             PageController.showBusyIndicator(true)
                         }
@@ -268,6 +306,7 @@ Window  {
                     text: qsTr("Save")
 
                     clickedFunc: function() {
+                        privateKeyPassphraseDrawer.isCloseByUser = true
                         privateKeyPassphraseDrawer.closeTriggered()
                         PageController.passphraseRequestDrawerClosed(passphrase.textField.text)
                     }
@@ -301,15 +340,44 @@ Window  {
     }
 
     Connections {
-        target: ApiConfigsController
+        target: PageController
 
-        function onSubscriptionExpiredOnServer() {
-            subscriptionExpiredDrawer.openTriggered()
+        function onUnsupportedConnectDrawerRequested() {
+            root.showUnsupportedConnectDrawer()
         }
     }
 
     Connections {
-        target: ApiSettingsController
+        target: SubscriptionUiController
+
+        function onSubscriptionExpiredOnServer() {
+            subscriptionExpiredDrawer.openTriggered()
+        }
+
+        function onCaptchaRequired(captchaId, captchaImageBase64, hint) {
+            if (captchaDialog.opened) {
+                PageController.showBusyIndicator(false)
+            }
+            captchaDialog.captchaId = captchaId
+            captchaDialog.captchaImageBase64 = captchaImageBase64
+            captchaDialog.hint = hint
+            captchaDialog.open()
+        }
+
+        function onCaptchaFlowDismissRequested() {
+            PageController.showBusyIndicator(false)
+            captchaDialog.close()
+        }
+
+        function onErrorOccurred(error) {
+            if (captchaDialog.opened) {
+                PageController.showBusyIndicator(false)
+            }
+        }
+    }
+
+    Connections {
+        target: SubscriptionUiController
 
         function onRenewalLinkReceived(url) {
             Qt.openUrlExternally(url)
@@ -326,6 +394,28 @@ Window  {
             anchors.centerIn: parent
             z: 1
         }
+    }
+
+    function showUnsupportedConnectDrawer() {
+        let headerText = qsTr("This subscription format is no longer supported")
+        let descriptionText = qsTr("This legacy Amnezia subscription type can no longer be used to connect in this application version.\nRemove the server from the app to continue.")
+        let yesButtonText = qsTr("Continue")
+        let noButtonText = qsTr("Cancel")
+
+        let yesButtonFunction = function() {
+            if (ConnectionController.isConnected) {
+                PageController.showNotificationMessage(qsTr("Cannot remove server during active connection"))
+                return
+            }
+
+            PageController.showBusyIndicator(true)
+            InstallController.removeServer(ServersUiController.defaultServerId)
+            PageController.showBusyIndicator(false)
+        }
+        let noButtonFunction = function() {
+        }
+
+        showQuestionDrawer(headerText, descriptionText, yesButtonText, noButtonText, yesButtonFunction, noButtonFunction)
     }
 
     function showQuestionDrawer(headerText, descriptionText, yesButtonText, noButtonText, yesButtonFunction, noButtonFunction) {
@@ -360,4 +450,5 @@ Window  {
         onAccepted: SystemController.fileDialogClosed(true)
         onRejected: SystemController.fileDialogClosed(false)
     }
+
 }
